@@ -15,7 +15,7 @@
             padding: 0;
         }
 
-        /* A4 용지 설정 */
+        /* A4 용지 설정 (마진 최적화) */
         .page {
             width: 210mm;
             min-height: 297mm;
@@ -51,7 +51,7 @@
         .tab-cell {
             border-right: 1px solid #ddd;
             border-bottom: 1px solid #000;
-            height: 18px; /* 요청하신 대로 높이 축소 */
+            height: 18px; /* 요청하신 콤팩트한 높이 */
             position: relative;
             display: flex;
             align-items: center;
@@ -117,37 +117,36 @@
 </head>
 <body>
 
-    <!-- 설정 패널 -->
-    <div class="no-print bg-white border-b p-4 sticky top-0 z-50 shadow-sm">
+    <!-- 상단 설정 패널 (컴팩트 버전) -->
+    <div class="no-print bg-white border-b p-3 sticky top-0 z-50 shadow-sm">
         <div class="max-w-4xl mx-auto flex flex-wrap items-end gap-4 justify-center">
             <div class="flex flex-col">
-                <label class="text-xs font-bold text-gray-600 mb-1">현 수</label>
-                <select id="stringCount" class="border rounded px-2 py-1 text-sm bg-gray-50">
-                    <option value="4">4현 (Bass/Uke)</option>
-                    <option value="5">5현 (Bass)</option>
-                    <option value="6" selected>6현 (Guitar)</option>
-                    <option value="7">7현 (Guitar)</option>
+                <label class="text-[10px] font-bold text-gray-500 mb-1">현 수</label>
+                <select id="stringCount" class="border rounded px-2 py-1 text-sm bg-gray-50 outline-none">
+                    <option value="4">4현</option>
+                    <option value="5">5현</option>
+                    <option value="6" selected>6현</option>
+                    <option value="7">7현</option>
                 </select>
             </div>
-            <div class="flex flex-col w-20">
-                <label class="text-xs font-bold text-gray-600 mb-1">한 줄 마디</label>
-                <input type="number" id="measuresPerLine" value="4" min="1" class="border rounded px-2 py-1 text-sm bg-gray-50">
+            <div class="flex flex-col w-16">
+                <label class="text-[10px] font-bold text-gray-500 mb-1">마디 수</label>
+                <input type="number" id="measuresPerLine" value="4" min="1" class="border rounded px-2 py-1 text-sm bg-gray-50 outline-none">
             </div>
-            <div class="flex flex-col w-24">
-                <label class="text-xs font-bold text-gray-600 mb-1">마디당 칸 수</label>
-                <input type="number" id="divisionPerMeasure" value="8" min="1" class="border rounded px-2 py-1 text-sm bg-gray-50">
+            <div class="flex flex-col w-20">
+                <label class="text-[10px] font-bold text-gray-500 mb-1">마디당 칸</label>
+                <input type="number" id="divisionPerMeasure" value="8" min="1" class="border rounded px-2 py-1 text-sm bg-gray-50 outline-none">
             </div>
             
             <div class="flex gap-2">
                 <button onclick="initScore()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-black transition">
-                    새 악보 만들기
+                    새로 만들기
                 </button>
-                <button onclick="window.print()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-blue-700 transition">
+                <button onclick="handlePrint()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-blue-700 transition">
                     PDF 저장 / 인쇄
                 </button>
             </div>
         </div>
-        <p class="text-[10px] text-gray-400 text-center mt-2">* 방향키로 칸 이동이 가능합니다. 숫자를 쓰면 배경 선이 가려집니다.</p>
     </div>
 
     <!-- 악보 영역 -->
@@ -159,7 +158,7 @@
         </div>
 
         <!-- 하단 줄 추가 버튼 -->
-        <div class="no-print mt-8 flex justify-center">
+        <div class="no-print mt-8 flex justify-center pb-10">
             <button onclick="addRow()" class="border-2 border-dashed border-gray-300 text-gray-400 px-10 py-3 rounded-lg hover:border-gray-500 hover:text-gray-600 transition font-bold">
                 + 줄 추가하기
             </button>
@@ -167,12 +166,9 @@
     </div>
 
     <script>
-        let rows = 4; // 초기 줄 수
-
         function initScore() {
             const container = document.getElementById('scoreContainer');
             container.innerHTML = '';
-            rows = 0;
             // 초기 4줄 생성
             for(let i=0; i<4; i++) {
                 addRow();
@@ -189,16 +185,16 @@
             const rowWrapper = document.createElement('div');
             rowWrapper.className = 'row-container';
             
-            // 섹션 라벨 (Verse, Chorus 등)
+            // 줄별 텍스트 입력 (Verse, Chorus 등)
             const labelInput = document.createElement('input');
             labelInput.type = 'text';
-            labelInput.placeholder = 'Section (e.g. Verse)';
-            labelInput.className = 'w-full text-xs font-bold text-gray-500 border-none outline-none mb-1 px-1';
+            labelInput.placeholder = '섹션 이름 (예: Verse)';
+            labelInput.className = 'w-full text-[10px] font-bold text-gray-400 border-none outline-none mb-1 px-1 uppercase tracking-wider';
             rowWrapper.appendChild(labelInput);
 
             // 삭제 버튼
             const delBtn = document.createElement('div');
-            delBtn.className = 'delete-btn no-print';
+            delBtn.className = 'delete-btn no-print shadow-md';
             delBtn.innerHTML = '✕';
             delBtn.onclick = () => rowWrapper.remove();
             rowWrapper.appendChild(delBtn);
@@ -213,7 +209,7 @@
                     const cell = document.createElement('div');
                     cell.className = 'tab-cell';
                     
-                    // 마디 구분선 추가
+                    // 마디 구분선
                     if ((c + 1) % divisionPerMeasure === 0) {
                         cell.classList.add('measure-border');
                     }
@@ -221,10 +217,8 @@
                     const input = document.createElement('input');
                     input.type = 'text';
                     input.className = 'tab-input';
-                    input.placeholder = '';
                     input.maxLength = 2;
                     
-                    // 키보드 네비게이션
                     input.onkeydown = (e) => handleKeyDown(e, input, s, c, stringCount, totalCols);
 
                     cell.appendChild(input);
@@ -234,7 +228,6 @@
 
             rowWrapper.appendChild(grid);
             container.appendChild(rowWrapper);
-            rows++;
         }
 
         function handleKeyDown(e, input, s, c, maxS, maxC) {
@@ -263,6 +256,14 @@
                 e.preventDefault();
                 nextInput.focus();
             }
+        }
+
+        // 인쇄 최적화 (INP Issue 해결)
+        function handlePrint() {
+            // 브라우저가 클릭 처리를 먼저 완료하도록 100ms 지연 후 실행
+            setTimeout(() => {
+                window.print();
+            }, 100);
         }
 
         // 초기 실행
