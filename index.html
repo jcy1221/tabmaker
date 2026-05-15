@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>간편 타브 악보 생성기</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background-color: #f3f4f6;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* A4 용지 설정 */
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 12mm;
+            margin: 10mm auto;
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            position: relative;
+            box-sizing: border-box;
+        }
+
+        /* 인쇄 설정 */
+        @media print {
+            body { background: none; }
+            .no-print { display: none !important; }
+            .page {
+                margin: 0;
+                box-shadow: none;
+                width: 100%;
+                height: 100%;
+                padding: 12mm;
+            }
+            .row-container:hover .delete-btn { display: none; }
+        }
+
+        /* 타브 격자 스타일 */
+        .tab-grid {
+            display: grid;
+            border-left: 1px solid #000;
+            width: 100%;
+        }
+
+        .tab-cell {
+            border-right: 1px solid #ddd;
+            border-bottom: 1px solid #000;
+            height: 18px; /* 요청하신 대로 높이 축소 */
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 마디 구분선 */
+        .measure-border {
+            border-right: 2px solid #000 !important;
+        }
+
+        .tab-input {
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            font-size: 11px;
+            border: none;
+            background: transparent;
+            outline: none;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        /* 숫자가 있을 때 배경 선 가리기 */
+        .tab-input:not(:placeholder-shown),
+        .tab-input:focus {
+            background-color: white;
+        }
+
+        .row-container {
+            position: relative;
+            margin-bottom: 15px;
+        }
+
+        .delete-btn {
+            position: absolute;
+            right: -40px;
+            top: 30px;
+            background: #ff4d4d;
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.2s;
+            font-size: 12px;
+        }
+
+        .row-container:hover .delete-btn {
+            opacity: 1;
+        }
+
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 설정 패널 -->
+    <div class="no-print bg-white border-b p-4 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-4xl mx-auto flex flex-wrap items-end gap-4 justify-center">
+            <div class="flex flex-col">
+                <label class="text-xs font-bold text-gray-600 mb-1">현 수</label>
+                <select id="stringCount" class="border rounded px-2 py-1 text-sm bg-gray-50">
+                    <option value="4">4현 (Bass/Uke)</option>
+                    <option value="5">5현 (Bass)</option>
+                    <option value="6" selected>6현 (Guitar)</option>
+                    <option value="7">7현 (Guitar)</option>
+                </select>
+            </div>
+            <div class="flex flex-col w-20">
+                <label class="text-xs font-bold text-gray-600 mb-1">한 줄 마디</label>
+                <input type="number" id="measuresPerLine" value="4" min="1" class="border rounded px-2 py-1 text-sm bg-gray-50">
+            </div>
+            <div class="flex flex-col w-24">
+                <label class="text-xs font-bold text-gray-600 mb-1">마디당 칸 수</label>
+                <input type="number" id="divisionPerMeasure" value="8" min="1" class="border rounded px-2 py-1 text-sm bg-gray-50">
+            </div>
+            
+            <div class="flex gap-2">
+                <button onclick="initScore()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-black transition">
+                    새 악보 만들기
+                </button>
+                <button onclick="window.print()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-blue-700 transition">
+                    PDF 저장 / 인쇄
+                </button>
+            </div>
+        </div>
+        <p class="text-[10px] text-gray-400 text-center mt-2">* 방향키로 칸 이동이 가능합니다. 숫자를 쓰면 배경 선이 가려집니다.</p>
+    </div>
+
+    <!-- 악보 영역 -->
+    <div class="page" id="printArea">
+        <input type="text" placeholder="곡 제목을 입력하세요" class="w-full text-center text-3xl font-bold border-none outline-none mb-6 placeholder-gray-200">
+        
+        <div id="scoreContainer">
+            <!-- 악보 줄이 여기에 동적으로 생성됨 -->
+        </div>
+
+        <!-- 하단 줄 추가 버튼 -->
+        <div class="no-print mt-8 flex justify-center">
+            <button onclick="addRow()" class="border-2 border-dashed border-gray-300 text-gray-400 px-10 py-3 rounded-lg hover:border-gray-500 hover:text-gray-600 transition font-bold">
+                + 줄 추가하기
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let rows = 4; // 초기 줄 수
+
+        function initScore() {
+            const container = document.getElementById('scoreContainer');
+            container.innerHTML = '';
+            rows = 0;
+            // 초기 4줄 생성
+            for(let i=0; i<4; i++) {
+                addRow();
+            }
+        }
+
+        function addRow() {
+            const container = document.getElementById('scoreContainer');
+            const stringCount = parseInt(document.getElementById('stringCount').value);
+            const measuresPerLine = parseInt(document.getElementById('measuresPerLine').value);
+            const divisionPerMeasure = parseInt(document.getElementById('divisionPerMeasure').value);
+            const totalCols = measuresPerLine * divisionPerMeasure;
+
+            const rowWrapper = document.createElement('div');
+            rowWrapper.className = 'row-container';
+            
+            // 섹션 라벨 (Verse, Chorus 등)
+            const labelInput = document.createElement('input');
+            labelInput.type = 'text';
+            labelInput.placeholder = 'Section (e.g. Verse)';
+            labelInput.className = 'w-full text-xs font-bold text-gray-500 border-none outline-none mb-1 px-1';
+            rowWrapper.appendChild(labelInput);
+
+            // 삭제 버튼
+            const delBtn = document.createElement('div');
+            delBtn.className = 'delete-btn no-print';
+            delBtn.innerHTML = '✕';
+            delBtn.onclick = () => rowWrapper.remove();
+            rowWrapper.appendChild(delBtn);
+
+            // 그리드 생성
+            const grid = document.createElement('div');
+            grid.className = 'tab-grid';
+            grid.style.gridTemplateColumns = `repeat(${totalCols}, 1fr)`;
+
+            for (let s = 0; s < stringCount; s++) {
+                for (let c = 0; c < totalCols; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'tab-cell';
+                    
+                    // 마디 구분선 추가
+                    if ((c + 1) % divisionPerMeasure === 0) {
+                        cell.classList.add('measure-border');
+                    }
+
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'tab-input';
+                    input.placeholder = '';
+                    input.maxLength = 2;
+                    
+                    // 키보드 네비게이션
+                    input.onkeydown = (e) => handleKeyDown(e, input, s, c, stringCount, totalCols);
+
+                    cell.appendChild(input);
+                    grid.appendChild(cell);
+                }
+            }
+
+            rowWrapper.appendChild(grid);
+            container.appendChild(rowWrapper);
+            rows++;
+        }
+
+        function handleKeyDown(e, input, s, c, maxS, maxC) {
+            let nextInput;
+            const currentGrid = input.closest('.tab-grid');
+            
+            if (e.key === 'ArrowRight') {
+                if (c < maxC - 1) {
+                    nextInput = currentGrid.children[s * maxC + (c + 1)].querySelector('input');
+                }
+            } else if (e.key === 'ArrowLeft') {
+                if (c > 0) {
+                    nextInput = currentGrid.children[s * maxC + (c - 1)].querySelector('input');
+                }
+            } else if (e.key === 'ArrowDown') {
+                if (s < maxS - 1) {
+                    nextInput = currentGrid.children[(s + 1) * maxC + c].querySelector('input');
+                }
+            } else if (e.key === 'ArrowUp') {
+                if (s > 0) {
+                    nextInput = currentGrid.children[(s - 1) * maxC + c].querySelector('input');
+                }
+            }
+
+            if (nextInput) {
+                e.preventDefault();
+                nextInput.focus();
+            }
+        }
+
+        // 초기 실행
+        window.onload = initScore;
+    </script>
+</body>
+</html>
