@@ -39,6 +39,16 @@
                 padding: 12mm;
             }
             .row-container:hover .delete-btn { display: none; }
+            /* 인쇄 시 비어있는 칸의 안내 문구 숨김 */
+            input::placeholder {
+                color: transparent !important;
+            }
+            input::-webkit-input-placeholder {
+                color: transparent !important;
+            }
+            input:-ms-input-placeholder {
+                color: transparent !important;
+            }
         }
 
         /* 타브 격자 스타일 */
