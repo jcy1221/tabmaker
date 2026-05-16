@@ -85,6 +85,13 @@
             outline: none;
             z-index: 10;
             cursor: pointer;
+            flex: 1; /* 추가: 분할 시 균등 배치 */
+            min-width: 0; /* 추가: 플렉스 박스 넘침 방지 */
+        }
+        
+        /* 분할된 칸의 구분선 */
+        .split-divider {
+            border-right: 1px dashed #ccc;
         }
 
         /* 선택된 셀(복사 범위) 하이라이트 */
@@ -169,6 +176,7 @@
                 </button>
             </div>
         </div>
+        <p class="text-[10px] text-gray-400 text-center mt-2">* 방향키로 이동 가능하며, <strong class="text-gray-500">칸을 우클릭하면 2개로 분할(8분음표 등)</strong> 됩니다. (다시 우클릭 시 병합)</p>
     </div>
 
     <div class="page" id="printArea">
@@ -212,7 +220,6 @@
 
         function addRow(savedData = null) {
             const container = document.getElementById('scoreContainer');
-            
             const stringCount = savedData ? savedData.stringCount : parseInt(document.getElementById('stringCount').value);
             const measuresPerLine = savedData ? savedData.measuresPerLine : parseInt(document.getElementById('measuresPerLine').value);
             const divisionPerMeasure = savedData ? savedData.divisionPerMeasure : parseInt(document.getElementById('divisionPerMeasure').value);
@@ -242,73 +249,128 @@
             grid.dataset.totalCols = totalCols;
             grid.style.gridTemplateColumns = `repeat(${totalCols}, 1fr)`;
 
+            const handlePaste = (e) => {
+                e.preventDefault();
+                const text = (e.clipboardData || window.clipboardData).getData('text');
+                const rowsText = text.split(/\r?\n/);
+                if (rowsText.length === 0) return;
+
+                const input = e.target;
+                const startS = parseInt(input.dataset.row);
+                const startC = parseInt(input.dataset.col);
+
+                if (rowsText.length === 1 && rowsText[0].split('\t').length === 1) {
+                    input.value = rowsText[0].trim().substring(0, 3);
+                    return;
+                }
+
+                for (let i = 0; i < rowsText.length; i++) {
+                    if (!rowsText[i] && i === rowsText.length - 1) continue; 
+                    const cols = rowsText[i].split('\t');
+                    for (let j = 0; j < cols.length; j++) {
+                        const targetS = startS + i;
+                        const targetC = startC + j;
+                        const targetInputs = grid.querySelectorAll(`input[data-row="${targetS}"][data-col="${targetC}"]`);
+                        
+                        if (targetInputs.length > 0) {
+                            const val = cols[j].trim();
+                            if (targetInputs.length === 1) {
+                                targetInputs[0].value = val.substring(0, 3);
+                            } else {
+                                const parts = val.split(',');
+                                targetInputs[0].value = (parts[0] || '').substring(0, 3);
+                                targetInputs[1].value = (parts[1] || '').substring(0, 3);
+                            }
+                        }
+                    }
+                }
+            };
+
+            const createInputNode = (s, c, subIndex = null) => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'tab-input';
+                input.maxLength = 3;
+                input.dataset.row = s;
+                input.dataset.col = c;
+                if (subIndex !== null) input.dataset.sub = subIndex;
+
+                input.onkeydown = (e) => handleKeyDown(e, input);
+
+                input.addEventListener('mousedown', (e) => {
+                    if (e.button !== 0) return; 
+                    isSelecting = true;
+                    selectedGrid = grid;
+                    selectionStart = {s, c};
+                    selectionEnd = {s, c};
+                    updateSelection();
+                });
+
+                input.addEventListener('mouseenter', () => {
+                    if (isSelecting && selectedGrid === grid) {
+                        selectionEnd = {s, c};
+                        updateSelection();
+                    }
+                });
+
+                input.addEventListener('paste', handlePaste);
+                return input;
+            };
+
             for (let s = 0; s < stringCount; s++) {
                 for (let c = 0; c < totalCols; c++) {
                     const cell = document.createElement('div');
                     cell.className = 'tab-cell';
-                    
                     if ((c + 1) % divisionPerMeasure === 0) {
                         cell.classList.add('measure-border');
                     }
 
-                    const input = document.createElement('input');
-                    input.type = 'text';
-                    input.className = 'tab-input';
-                    input.maxLength = 3;
-                    input.dataset.row = s;
-                    input.dataset.col = c;
-                    
-                    if (savedData && savedData.cellMap && savedData.cellMap[`${s}-${c}`]) {
-                        input.value = savedData.cellMap[`${s}-${c}`];
+                    const isSplitCell = savedData && savedData.splitCells && savedData.splitCells.includes(`${s}-${c}`);
+
+                    if (isSplitCell) {
+                        cell.classList.add('is-split');
+                        const i1 = createInputNode(s, c, 0);
+                        const i2 = createInputNode(s, c, 1);
+                        i1.classList.add('split-divider');
+                        if (savedData.cellMap[`${s}-${c}-0`]) i1.value = savedData.cellMap[`${s}-${c}-0`];
+                        if (savedData.cellMap[`${s}-${c}-1`]) i2.value = savedData.cellMap[`${s}-${c}-1`];
+                        cell.appendChild(i1);
+                        cell.appendChild(i2);
+                    } else {
+                        const input = createInputNode(s, c);
+                        if (savedData && savedData.cellMap && savedData.cellMap[`${s}-${c}`]) {
+                            input.value = savedData.cellMap[`${s}-${c}`];
+                        }
+                        cell.appendChild(input);
                     }
-                    
-                    input.onkeydown = (e) => handleKeyDown(e, input, s, c, stringCount, totalCols);
 
-                    input.addEventListener('mousedown', (e) => {
-                        if (e.button !== 0) return; 
-                        isSelecting = true;
-                        selectedGrid = grid;
-                        selectionStart = {s, c};
-                        selectionEnd = {s, c};
-                        updateSelection();
-                    });
-
-                    input.addEventListener('mouseenter', () => {
-                        if (isSelecting && selectedGrid === grid) {
-                            selectionEnd = {s, c};
-                            updateSelection();
-                        }
-                    });
-
-                    input.addEventListener('paste', (e) => {
+                    // 우클릭으로 칸 분할/병합 기능
+                    cell.addEventListener('contextmenu', (e) => {
                         e.preventDefault();
-                        const text = (e.clipboardData || window.clipboardData).getData('text');
-                        const rows = text.split(/\r?\n/);
-                        if (rows.length === 0) return;
-
-                        if (rows.length === 1 && rows[0].split('\t').length === 1) {
-                            input.value = rows[0].trim().substring(0, 3);
-                            return;
-                        }
-
-                        const startS = parseInt(input.dataset.row);
-                        const startC = parseInt(input.dataset.col);
-
-                        for (let i = 0; i < rows.length; i++) {
-                            if (!rows[i] && i === rows.length - 1) continue; 
-                            const cols = rows[i].split('\t');
-                            for (let j = 0; j < cols.length; j++) {
-                                const targetS = startS + i;
-                                const targetC = startC + j;
-                                const targetInput = grid.querySelector(`input[data-row="${targetS}"][data-col="${targetC}"]`);
-                                if (targetInput) {
-                                    targetInput.value = cols[j].trim().substring(0, 3);
-                                }
+                        if (cell.classList.contains('is-split')) {
+                            const inputs = cell.querySelectorAll('input');
+                            if ((inputs[0].value || inputs[1].value) && !confirm('칸을 다시 합치면 입력된 내용이 지워질 수 있습니다. 진행할까요?')) {
+                                return;
                             }
+                            cell.classList.remove('is-split');
+                            cell.innerHTML = '';
+                            const input = createInputNode(s, c);
+                            cell.appendChild(input);
+                            input.focus();
+                        } else {
+                            const existingVal = cell.querySelector('input').value;
+                            cell.classList.add('is-split');
+                            cell.innerHTML = '';
+                            const i1 = createInputNode(s, c, 0);
+                            const i2 = createInputNode(s, c, 1);
+                            i1.classList.add('split-divider');
+                            i1.value = existingVal; // 원래 있던 숫자를 왼쪽으로 이동
+                            cell.appendChild(i1);
+                            cell.appendChild(i2);
+                            i1.focus();
                         }
                     });
 
-                    cell.appendChild(input);
                     grid.appendChild(cell);
                 }
             }
@@ -331,8 +393,8 @@
 
             for (let s = minS; s <= maxS; s++) {
                 for (let c = minC; c <= maxC; c++) {
-                    const cellInput = selectedGrid.querySelector(`input[data-row="${s}"][data-col="${c}"]`);
-                    if (cellInput) cellInput.classList.add('selected-cell');
+                    const cellInputs = selectedGrid.querySelectorAll(`input[data-row="${s}"][data-col="${c}"]`);
+                    cellInputs.forEach(input => input.classList.add('selected-cell'));
                 }
             }
         }
@@ -364,8 +426,14 @@
             for (let s = minS; s <= maxS; s++) {
                 let rowText = [];
                 for (let c = minC; c <= maxC; c++) {
-                    const cellInput = selectedGrid.querySelector(`input[data-row="${s}"][data-col="${c}"]`);
-                    rowText.push(cellInput ? cellInput.value : '');
+                    const cellInputs = selectedGrid.querySelectorAll(`input[data-row="${s}"][data-col="${c}"]`);
+                    if (cellInputs.length === 1) {
+                        rowText.push(cellInputs[0].value);
+                    } else if (cellInputs.length > 1) {
+                        rowText.push(Array.from(cellInputs).map(i => i.value).join(','));
+                    } else {
+                        rowText.push('');
+                    }
                 }
                 clipboardText += rowText.join('\t') + '\n';
             }
@@ -395,10 +463,19 @@
                 const label = row.querySelector('.section-label').value;
                 const grid = row.querySelector('.tab-grid');
                 const cellMap = {};
+                const splitCells = [];
                 
                 grid.querySelectorAll('.tab-input').forEach(input => {
                     if (input.value) {
-                        cellMap[`${input.dataset.row}-${input.dataset.col}`] = input.value;
+                        const sub = input.dataset.sub !== undefined ? `-${input.dataset.sub}` : '';
+                        cellMap[`${input.dataset.row}-${input.dataset.col}${sub}`] = input.value;
+                    }
+                });
+
+                grid.querySelectorAll('.is-split').forEach(cell => {
+                    const firstInput = cell.querySelector('input');
+                    if (firstInput) {
+                        splitCells.push(`${firstInput.dataset.row}-${firstInput.dataset.col}`);
                     }
                 });
 
@@ -407,7 +484,8 @@
                     stringCount: parseInt(grid.dataset.stringCount),
                     measuresPerLine: parseInt(grid.dataset.measuresPerLine),
                     divisionPerMeasure: parseInt(grid.dataset.divisionPerMeasure),
-                    cellMap
+                    cellMap,
+                    splitCells
                 });
             });
 
@@ -499,25 +577,42 @@
             }
         }
 
-        function handleKeyDown(e, input, s, c, maxS, maxC) {
+        function handleKeyDown(e, input) {
+            const cell = input.parentElement;
+            const grid = cell.parentElement;
+            const cells = Array.from(grid.children);
+            const cellIndex = cells.indexOf(cell);
+            const maxC = parseInt(grid.dataset.totalCols);
+            
             let nextInput;
-            const currentGrid = input.closest('.tab-grid');
             
             if (e.key === 'ArrowRight') {
-                if (c < maxC - 1) {
-                    nextInput = currentGrid.children[s * maxC + (c + 1)].querySelector('input');
+                if (input.nextElementSibling && input.nextElementSibling.tagName === 'INPUT') {
+                    nextInput = input.nextElementSibling;
+                } else if (cellIndex % maxC < maxC - 1) {
+                    nextInput = cells[cellIndex + 1].querySelector('input');
                 }
             } else if (e.key === 'ArrowLeft') {
-                if (c > 0) {
-                    nextInput = currentGrid.children[s * maxC + (c - 1)].querySelector('input');
+                if (input.previousElementSibling && input.previousElementSibling.tagName === 'INPUT') {
+                    nextInput = input.previousElementSibling;
+                } else if (cellIndex % maxC > 0) {
+                    const prevCell = cells[cellIndex - 1];
+                    const inputs = prevCell.querySelectorAll('input');
+                    nextInput = inputs[inputs.length - 1];
                 }
             } else if (e.key === 'ArrowDown') {
-                if (s < maxS - 1) {
-                    nextInput = currentGrid.children[(s + 1) * maxC + c].querySelector('input');
+                if (cellIndex + maxC < cells.length) {
+                    const targetCell = cells[cellIndex + maxC];
+                    const subIdx = input.dataset.sub || 0;
+                    const targets = targetCell.querySelectorAll('input');
+                    nextInput = targets[subIdx] || targets[0];
                 }
             } else if (e.key === 'ArrowUp') {
-                if (s > 0) {
-                    nextInput = currentGrid.children[(s - 1) * maxC + c].querySelector('input');
+                if (cellIndex - maxC >= 0) {
+                    const targetCell = cells[cellIndex - maxC];
+                    const subIdx = input.dataset.sub || 0;
+                    const targets = targetCell.querySelectorAll('input');
+                    nextInput = targets[subIdx] || targets[0];
                 }
             }
 
