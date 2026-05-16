@@ -249,43 +249,7 @@
             grid.dataset.totalCols = totalCols;
             grid.style.gridTemplateColumns = `repeat(${totalCols}, 1fr)`;
 
-            const handlePaste = (e) => {
-                e.preventDefault();
-                const text = (e.clipboardData || window.clipboardData).getData('text');
-                const rowsText = text.split(/\r?\n/);
-                if (rowsText.length === 0) return;
-
-                const input = e.target;
-                const startS = parseInt(input.dataset.row);
-                const startC = parseInt(input.dataset.col);
-
-                if (rowsText.length === 1 && rowsText[0].split('\t').length === 1) {
-                    input.value = rowsText[0].trim().substring(0, 3);
-                    return;
-                }
-
-                for (let i = 0; i < rowsText.length; i++) {
-                    if (!rowsText[i] && i === rowsText.length - 1) continue; 
-                    const cols = rowsText[i].split('\t');
-                    for (let j = 0; j < cols.length; j++) {
-                        const targetS = startS + i;
-                        const targetC = startC + j;
-                        const targetInputs = grid.querySelectorAll(`input[data-row="${targetS}"][data-col="${targetC}"]`);
-                        
-                        if (targetInputs.length > 0) {
-                            const val = cols[j].trim();
-                            if (targetInputs.length === 1) {
-                                targetInputs[0].value = val.substring(0, 3);
-                            } else {
-                                const parts = val.split(',');
-                                targetInputs[0].value = (parts[0] || '').substring(0, 3);
-                                targetInputs[1].value = (parts[1] || '').substring(0, 3);
-                            }
-                        }
-                    }
-                }
-            };
-
+            // Helper 함수 끌어올림
             const createInputNode = (s, c, subIndex = null) => {
                 const input = document.createElement('input');
                 input.type = 'text';
@@ -315,6 +279,68 @@
 
                 input.addEventListener('paste', handlePaste);
                 return input;
+            };
+
+            const handlePaste = (e) => {
+                e.preventDefault();
+                const text = (e.clipboardData || window.clipboardData).getData('text');
+                const rowsText = text.split(/\r?\n/);
+                if (rowsText.length === 0) return;
+
+                const startInput = e.target;
+                const startS = parseInt(startInput.dataset.row);
+                const startC = parseInt(startInput.dataset.col);
+
+                for (let i = 0; i < rowsText.length; i++) {
+                    if (!rowsText[i] && i === rowsText.length - 1) continue; 
+                    const cols = rowsText[i].split('\t');
+                    for (let j = 0; j < cols.length; j++) {
+                        const targetS = startS + i;
+                        const targetC = startC + j;
+                        const targetInputsList = grid.querySelectorAll(`input[data-row="${targetS}"][data-col="${targetC}"]`);
+                        
+                        if (targetInputsList.length > 0) {
+                            const targetCell = targetInputsList[0].closest('.tab-cell');
+                            const val = cols[j].trim();
+                            
+                            // 복사한 데이터에 콤마가 포함된 경우 (분할 데이터 붙여넣기)
+                            if (val.includes(',')) {
+                                const parts = val.split(',');
+                                // 타겟 셀이 분할되어 있지 않다면 분할 처리
+                                if (!targetCell.classList.contains('is-split')) {
+                                    targetCell.classList.add('is-split');
+                                    targetCell.innerHTML = '';
+                                    const i1 = createInputNode(targetS, targetC, 0);
+                                    const i2 = createInputNode(targetS, targetC, 1);
+                                    i1.classList.add('split-divider');
+                                    targetCell.appendChild(i1);
+                                    targetCell.appendChild(i2);
+                                }
+                                const inputs = targetCell.querySelectorAll('input');
+                                inputs[0].value = (parts[0] || '').substring(0, 3);
+                                inputs[1].value = (parts[1] || '').substring(0, 3);
+                            } 
+                            // 단일 데이터 붙여넣기
+                            else {
+                                // 타겟 셀이 분할되어 있다면 병합 처리
+                                if (targetCell.classList.contains('is-split')) {
+                                    targetCell.classList.remove('is-split');
+                                    targetCell.innerHTML = '';
+                                    const newInput = createInputNode(targetS, targetC);
+                                    targetCell.appendChild(newInput);
+                                    newInput.value = val.substring(0, 3);
+                                    
+                                    // 붙여넣기를 시작한 셀이 병합으로 인해 사라졌을 경우 포커스 복원
+                                    if (targetS === startS && targetC === startC) {
+                                        newInput.focus();
+                                    }
+                                } else {
+                                    targetCell.querySelector('input').value = val.substring(0, 3);
+                                }
+                            }
+                        }
+                    }
+                }
             };
 
             for (let s = 0; s < stringCount; s++) {
