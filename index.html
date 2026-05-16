@@ -51,11 +51,12 @@
         .tab-cell {
             border-right: 1px solid #ddd;
             border-bottom: 1px solid #000;
-            height: 18px; /* 요청하신 콤팩트한 높이 */
+            height: 16px; /* 위아래 높이 살짝 좁힘 */
             position: relative;
             display: flex;
             align-items: center;
             justify-content: center;
+            container-type: inline-size; /* 컨테이너 쿼리로 폰트 크기 자동 조절 */
         }
 
         /* 마디 구분선 */
@@ -67,12 +68,18 @@
             width: 100%;
             height: 100%;
             text-align: center;
-            font-size: 11px;
+            font-size: 11px; /* Fallback */
+            font-size: clamp(7px, 55cqw, 11px); /* 칸 너비에 따라 폰트 크기 자동 축소 */
             border: none;
             background: transparent;
             outline: none;
             z-index: 10;
             cursor: pointer;
+        }
+
+        /* 선택된 셀(복사 범위) 하이라이트 */
+        .selected-cell {
+            background-color: rgba(59, 130, 246, 0.2) !important;
         }
 
         /* 숫자가 있을 때 배경 선 가리기 */
@@ -139,11 +146,17 @@
             </div>
             
             <div class="flex gap-2">
-                <button onclick="initScore()" class="bg-gray-800 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-black transition">
+                <button onclick="saveScore()" class="bg-green-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-green-700 transition">
+                    임시저장
+                </button>
+                <button onclick="showLoadModal()" class="bg-yellow-500 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-yellow-600 transition">
+                    불러오기
+                </button>
+                <button onclick="initScore()" class="bg-gray-800 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-black transition">
                     새로 만들기
                 </button>
-                <button onclick="handlePrint()" class="bg-blue-600 text-white px-4 py-1.5 rounded text-sm font-bold hover:bg-blue-700 transition">
-                    PDF 저장 / 인쇄
+                <button onclick="handlePrint()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-700 transition">
+                    PDF 저장
                 </button>
             </div>
         </div>
@@ -151,7 +164,7 @@
 
     <!-- 악보 영역 -->
     <div class="page" id="printArea">
-        <input type="text" placeholder="곡 제목을 입력하세요" class="w-full text-center text-3xl font-bold border-none outline-none mb-6 placeholder-gray-200">
+        <input type="text" id="songTitle" placeholder="곡 제목을 입력하세요" class="w-full text-center text-3xl font-bold border-none outline-none mb-6 placeholder-gray-200">
         
         <div id="scoreContainer">
             <!-- 악보 줄이 여기에 동적으로 생성됨 -->
@@ -165,7 +178,27 @@
         </div>
     </div>
 
+    <!-- 저장 목록 모달 (새로 추가됨) -->
+    <div id="saveListModal" class="no-print hidden fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-center justify-center">
+        <div class="bg-white rounded-lg p-6 w-96 max-w-[90%] shadow-xl">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold">저장된 악보 목록</h2>
+                <button onclick="closeModal()" class="text-gray-500 hover:text-red-500 text-xl font-bold transition">✕</button>
+            </div>
+            <ul id="saveList" class="max-h-60 overflow-y-auto border border-gray-200 rounded divide-y divide-gray-100">
+                <!-- 목록이 여기에 동적으로 추가됨 -->
+            </ul>
+        </div>
+    </div>
+
     <script>
+        // 범위 선택 및 복사 기능을 위한 전역 변수
+        let gridCounter = 0;
+        let isSelecting = false;
+        let selectionStart = null;
+        let selectionEnd = null;
+        let selectedGrid = null;
+
         function initScore() {
             const container = document.getElementById('scoreContainer');
             container.innerHTML = '';
@@ -175,12 +208,15 @@
             }
         }
 
-        function addRow() {
+        function addRow(savedData = null) {
             const container = document.getElementById('scoreContainer');
-            const stringCount = parseInt(document.getElementById('stringCount').value);
-            const measuresPerLine = parseInt(document.getElementById('measuresPerLine').value);
-            const divisionPerMeasure = parseInt(document.getElementById('divisionPerMeasure').value);
+            
+            // 불러오기 데이터가 있으면 해당 설정 사용, 없으면 상단 패널 설정 사용
+            const stringCount = savedData ? savedData.stringCount : parseInt(document.getElementById('stringCount').value);
+            const measuresPerLine = savedData ? savedData.measuresPerLine : parseInt(document.getElementById('measuresPerLine').value);
+            const divisionPerMeasure = savedData ? savedData.divisionPerMeasure : parseInt(document.getElementById('divisionPerMeasure').value);
             const totalCols = measuresPerLine * divisionPerMeasure;
+            const currentGridIndex = gridCounter++;
 
             const rowWrapper = document.createElement('div');
             rowWrapper.className = 'row-container';
@@ -189,7 +225,8 @@
             const labelInput = document.createElement('input');
             labelInput.type = 'text';
             labelInput.placeholder = '섹션 이름 (예: Verse)';
-            labelInput.className = 'w-full text-[10px] font-bold text-gray-400 border-none outline-none mb-1 px-1 uppercase tracking-wider';
+            labelInput.className = 'section-label w-full text-[10px] font-bold text-gray-400 border-none outline-none mb-1 px-1 uppercase tracking-wider';
+            if(savedData && savedData.label) labelInput.value = savedData.label;
             rowWrapper.appendChild(labelInput);
 
             // 삭제 버튼
@@ -202,6 +239,10 @@
             // 그리드 생성
             const grid = document.createElement('div');
             grid.className = 'tab-grid';
+            grid.dataset.stringCount = stringCount;
+            grid.dataset.measuresPerLine = measuresPerLine;
+            grid.dataset.divisionPerMeasure = divisionPerMeasure;
+            grid.dataset.totalCols = totalCols;
             grid.style.gridTemplateColumns = `repeat(${totalCols}, 1fr)`;
 
             for (let s = 0; s < stringCount; s++) {
@@ -217,9 +258,65 @@
                     const input = document.createElement('input');
                     input.type = 'text';
                     input.className = 'tab-input';
-                    input.maxLength = 2;
+                    input.maxLength = 3; // 요청하신 대로 3글자까지 입력 가능
+                    input.dataset.row = s;
+                    input.dataset.col = c;
                     
+                    // 불러온 데이터가 있다면 셀 값 채우기
+                    if (savedData && savedData.cellMap && savedData.cellMap[`${s}-${c}`]) {
+                        input.value = savedData.cellMap[`${s}-${c}`];
+                    }
+                    
+                    // 키보드 이동 이벤트
                     input.onkeydown = (e) => handleKeyDown(e, input, s, c, stringCount, totalCols);
+
+                    // --- 마우스 드래그 범위 선택 기능 ---
+                    input.addEventListener('mousedown', (e) => {
+                        if (e.button !== 0) return; // 좌클릭만 작동
+                        isSelecting = true;
+                        selectedGrid = grid;
+                        selectionStart = {s, c};
+                        selectionEnd = {s, c};
+                        updateSelection();
+                    });
+
+                    input.addEventListener('mouseenter', () => {
+                        if (isSelecting && selectedGrid === grid) {
+                            selectionEnd = {s, c};
+                            updateSelection();
+                        }
+                    });
+
+                    // --- 붙여넣기 (Paste) 기능 ---
+                    input.addEventListener('paste', (e) => {
+                        e.preventDefault();
+                        const text = (e.clipboardData || window.clipboardData).getData('text');
+                        const rows = text.split(/\r?\n/);
+                        if (rows.length === 0) return;
+
+                        // 단일 셀 복사본일 경우
+                        if (rows.length === 1 && rows[0].split('\t').length === 1) {
+                            input.value = rows[0].trim().substring(0, 3);
+                            return;
+                        }
+
+                        // 다중 셀 (범위) 붙여넣기일 경우
+                        const startS = parseInt(input.dataset.row);
+                        const startC = parseInt(input.dataset.col);
+
+                        for (let i = 0; i < rows.length; i++) {
+                            if (!rows[i] && i === rows.length - 1) continue; 
+                            const cols = rows[i].split('\t');
+                            for (let j = 0; j < cols.length; j++) {
+                                const targetS = startS + i;
+                                const targetC = startC + j;
+                                const targetInput = grid.querySelector(`input[data-row="${targetS}"][data-col="${targetC}"]`);
+                                if (targetInput) {
+                                    targetInput.value = cols[j].trim().substring(0, 3);
+                                }
+                            }
+                        }
+                    });
 
                     cell.appendChild(input);
                     grid.appendChild(cell);
@@ -228,6 +325,199 @@
 
             rowWrapper.appendChild(grid);
             container.appendChild(rowWrapper);
+        }
+
+        // 범위 선택 시각적 업데이트
+        function updateSelection() {
+            if (!selectedGrid) return;
+            selectedGrid.querySelectorAll('.selected-cell').forEach(el => el.classList.remove('selected-cell'));
+
+            if (!selectionStart || !selectionEnd) return;
+            if (selectionStart.s === selectionEnd.s && selectionStart.c === selectionEnd.c) return;
+
+            const minS = Math.min(selectionStart.s, selectionEnd.s);
+            const maxS = Math.max(selectionStart.s, selectionEnd.s);
+            const minC = Math.min(selectionStart.c, selectionEnd.c);
+            const maxC = Math.max(selectionStart.c, selectionEnd.c);
+
+            for (let s = minS; s <= maxS; s++) {
+                for (let c = minC; c <= maxC; c++) {
+                    const cellInput = selectedGrid.querySelector(`input[data-row="${s}"][data-col="${c}"]`);
+                    if (cellInput) cellInput.classList.add('selected-cell');
+                }
+            }
+        }
+
+        // 마우스 떼면 범위 선택 종료
+        document.addEventListener('mouseup', () => {
+            isSelecting = false;
+        });
+
+        // 화면 아무곳이나 클릭하면 선택 해제
+        document.addEventListener('mousedown', (e) => {
+            if (!e.target.classList.contains('tab-input')) {
+                document.querySelectorAll('.selected-cell').forEach(el => el.classList.remove('selected-cell'));
+                selectionStart = null;
+                selectionEnd = null;
+            }
+        });
+
+        // 복사 (Copy) 기능
+        document.addEventListener('copy', (e) => {
+            if (!selectionStart || !selectionEnd || !selectedGrid) return;
+            
+            const minS = Math.min(selectionStart.s, selectionEnd.s);
+            const maxS = Math.max(selectionStart.s, selectionEnd.s);
+            const minC = Math.min(selectionStart.c, selectionEnd.c);
+            const maxC = Math.max(selectionStart.c, selectionEnd.c);
+
+            if (minS === maxS && minC === maxC) return; // 단일 셀은 시스템 기본 복사 허용
+
+            e.preventDefault();
+            let clipboardText = '';
+            for (let s = minS; s <= maxS; s++) {
+                let rowText = [];
+                for (let c = minC; c <= maxC; c++) {
+                    const cellInput = selectedGrid.querySelector(`input[data-row="${s}"][data-col="${c}"]`);
+                    rowText.push(cellInput ? cellInput.value : '');
+                }
+                clipboardText += rowText.join('\t') + '\n';
+            }
+            e.clipboardData.setData('text/plain', clipboardText);
+            
+            // 복사 완료 후 자연스럽게 선택 해제
+            document.querySelectorAll('.selected-cell').forEach(el => el.classList.remove('selected-cell'));
+        });
+
+        // 임시저장 기능 (다중 저장 지원)
+        function saveScore() {
+            let title = document.getElementById('songTitle').value.trim();
+            
+            if (!title) {
+                title = prompt("곡 제목이 비어있네요! 저장할 이름을 입력해주세요:", "새 악보");
+                if (!title) return; // 사용자가 취소한 경우
+                document.getElementById('songTitle').value = title;
+            }
+
+            const data = {
+                title: title,
+                stringCount: document.getElementById('stringCount').value,
+                measuresPerLine: document.getElementById('measuresPerLine').value,
+                divisionPerMeasure: document.getElementById('divisionPerMeasure').value,
+                rows: []
+            };
+
+            document.querySelectorAll('.row-container').forEach(row => {
+                const label = row.querySelector('.section-label').value;
+                const grid = row.querySelector('.tab-grid');
+                const cellMap = {};
+                
+                grid.querySelectorAll('.tab-input').forEach(input => {
+                    if (input.value) {
+                        cellMap[`${input.dataset.row}-${input.dataset.col}`] = input.value;
+                    }
+                });
+
+                data.rows.push({
+                    label,
+                    stringCount: parseInt(grid.dataset.stringCount),
+                    measuresPerLine: parseInt(grid.dataset.measuresPerLine),
+                    divisionPerMeasure: parseInt(grid.dataset.divisionPerMeasure),
+                    cellMap
+                });
+            });
+
+            // 기존 저장 목록 가져오기
+            let saves = JSON.parse(localStorage.getItem('tabScoreSaves') || '{}');
+            saves[title] = data; // 제목을 키로 저장 (덮어쓰기 허용)
+
+            localStorage.setItem('tabScoreSaves', JSON.stringify(saves));
+            alert(`'${title}' 악보가 기기에 안전하게 저장되었어요! 💾`);
+        }
+
+        // 불러오기 모달 표시 기능
+        function showLoadModal() {
+            const saves = JSON.parse(localStorage.getItem('tabScoreSaves') || '{}');
+            const saveTitles = Object.keys(saves);
+
+            if (saveTitles.length === 0) {
+                alert('앗, 아직 저장된 악보가 없어요! 😅');
+                return;
+            }
+
+            const listEl = document.getElementById('saveList');
+            listEl.innerHTML = '';
+
+            saveTitles.forEach(title => {
+                const li = document.createElement('li');
+                li.className = 'flex justify-between items-center p-3 hover:bg-gray-50';
+                
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'font-semibold text-sm truncate w-48 text-gray-700';
+                titleSpan.textContent = title;
+
+                const btnGroup = document.createElement('div');
+                btnGroup.className = 'flex gap-2';
+
+                const loadBtn = document.createElement('button');
+                loadBtn.className = 'bg-blue-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-blue-600 transition';
+                loadBtn.textContent = '열기';
+                loadBtn.onclick = () => loadSpecificScore(title, saves[title]);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'bg-red-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-red-600 transition';
+                delBtn.textContent = '삭제';
+                delBtn.onclick = () => deleteScore(title);
+
+                btnGroup.appendChild(loadBtn);
+                btnGroup.appendChild(delBtn);
+                li.appendChild(titleSpan);
+                li.appendChild(btnGroup);
+                listEl.appendChild(li);
+            });
+
+            document.getElementById('saveListModal').classList.remove('hidden');
+        }
+
+        function closeModal() {
+            document.getElementById('saveListModal').classList.add('hidden');
+        }
+
+        // 특정 악보 불러오기
+        function loadSpecificScore(title, data) {
+            try {
+                document.getElementById('songTitle').value = data.title || title;
+                document.getElementById('stringCount').value = data.stringCount || '6';
+                document.getElementById('measuresPerLine').value = data.measuresPerLine || '4';
+                document.getElementById('divisionPerMeasure').value = data.divisionPerMeasure || '8';
+
+                const container = document.getElementById('scoreContainer');
+                container.innerHTML = '';
+                
+                data.rows.forEach(rowData => {
+                    addRow(rowData);
+                });
+                closeModal();
+            } catch(e) {
+                alert('데이터를 불러오는 중 오류가 발생했어요. 😢');
+            }
+        }
+
+        // 특정 악보 삭제하기
+        function deleteScore(title) {
+            if (confirm(`정말 '${title}' 악보를 지울까요? 복구할 수 없어요! 🚨`)) {
+                let saves = JSON.parse(localStorage.getItem('tabScoreSaves') || '{}');
+                delete saves[title];
+                localStorage.setItem('tabScoreSaves', JSON.stringify(saves));
+                
+                // 삭제 후 목록에 남은게 없으면 모달 닫기
+                if (Object.keys(saves).length === 0) {
+                    closeModal();
+                    alert('모든 저장된 악보가 삭제되었습니다.');
+                } else {
+                    showLoadModal(); // 목록 새로고침
+                }
+            }
         }
 
         function handleKeyDown(e, input, s, c, maxS, maxC) {
