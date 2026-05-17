@@ -19,8 +19,8 @@
         .page {
             width: 210mm;
             min-height: 297mm;
-            padding: 12mm;
-            margin: 10mm auto;
+            padding: 10mm; /* 12mm에서 10mm로 전체 여백 축소 */
+            margin: 8mm auto; /* 10mm에서 8mm로 화면 여백 축소 */
             background: white;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
             position: relative;
@@ -36,7 +36,7 @@
                 box-shadow: none;
                 width: 100%;
                 height: 100%;
-                padding: 12mm;
+                padding: 10mm; /* 인쇄 시 여백도 10mm로 축소 */
             }
             .row-container:hover .delete-btn { display: none; }
             /* 인쇄 시 비어있는 칸의 안내 문구 숨김 */
@@ -61,7 +61,7 @@
         .tab-cell {
             border-right: 1px solid #ddd;
             border-bottom: 1px solid #000;
-            height: 14px; /* 위아래 높이를 16px -> 14px로 더 축소 */
+            height: 12px; /* 위아래 높이를 14px에서 12px로 더 축소 */
             position: relative;
             display: flex;
             align-items: center;
@@ -107,7 +107,7 @@
 
         .row-container {
             position: relative;
-            margin-bottom: 10px; /* 줄 간격을 15px -> 10px로 축소 */
+            margin-bottom: 8px; /* 줄 간격을 10px에서 8px로 축소 */
         }
 
         .delete-btn {
